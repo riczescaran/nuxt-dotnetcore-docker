@@ -1,0 +1,79 @@
+version: "3"
+
+networks:
+    proxy:
+
+services:
+    nuxtjs:
+        build:
+            context: ./nuxtjs
+            dockerfile: Dockerfile
+        container_name: nuxtjs
+        environment:
+            APP_ROOT: /app
+            VIRTUAL_HOST: nuxtjs.test
+            LETSENCRYPT_HOST: nuxtjs.test
+            LETSENCRYPT_EMAIL: your-email@example.com
+            HOST: 0.0.0.0
+        ports:
+            - "3000:3000"
+        restart: always
+        networks:
+            - proxy
+        depends_on:
+            - nginx-proxy
+            - nginx-proxy-letsencrypt
+            - dotnetcore
+
+    dotnetcore:
+        build:
+            context: ./dotnetcore
+            dockerfile: Dockerfile
+        container_name: dotnetcore
+        environment:
+            APP_ROOT: /app
+            VIRTUAL_HOST: dotnetcore.test
+            LETSENCRYPT_HOST: dotnetcore.test
+            LETSENCRYPT_EMAIL: your-email@example.com
+            ASPNETCORE_ENVIRONMENT: Development
+            ASPNETCORE_URLS: http://+:5000
+        ports:
+            - "5000:5000"
+        restart: always
+        networks:
+            - proxy
+        depends_on:
+            - nginx-proxy
+            - nginx-proxy-letsencrypt
+
+    nginx-proxy:
+        image: jwilder/nginx-proxy
+        container_name: nginx-proxy
+        ports:
+            - "80:80"
+            - "443:443"
+        volumes:
+            - ./letsencrypt/certs:/etc/nginx/certs:ro
+            - ./letsencrypt/vhostd:/etc/nginx/vhost.d
+            - ./letsencrypt/html:/usr/share/nginx/html
+            - ./letsencrypt/acme:/etc/acme.sh
+            - /var/run/docker.sock:/tmp/docker.sock:ro
+        restart: always
+        privileged: true
+        networks:
+            - proxy
+
+    nginx-proxy-letsencrypt:
+        image: jrcs/letsencrypt-nginx-proxy-companion
+        container_name: nginx-proxy-letsencrypt
+        volumes:
+            - ./letsencrypt/certs:/etc/nginx/certs:rw
+            - ./letsencrypt/vhostd:/etc/nginx/vhost.d
+            - ./letsencrypt/html:/usr/share/nginx/html
+            - ./letsencrypt/acme:/etc/acme.sh
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+        environment:
+            DEFAULT_EMAIL: your-email@example.com
+            NGINX_PROXY_CONTAINER: nginx-proxy
+        networks:
+            - proxy
